@@ -70,7 +70,13 @@ const authorize = async () => {
 };
 
 const getAmazonPrice = async (link) => {
-    const apiKey = '';
+    const content = await fs.readFile(CREDENTIALS_PATH);
+    const keys = JSON.parse(content);
+    const apiKey = keys?.rainforestapi?.apiKey;
+    if (!apiKey) {
+        console.error('Rainforest API Key not found');
+        return null;
+    }
     const asin = link?.replace(/.*?amazon.*?\/dp\/(.{10}?)[\?\/]?.*/, '$1');
     if (!asin) {
         return null;
