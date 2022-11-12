@@ -1,0 +1,26 @@
+{
+  "name": "google-sheets-updater",
+  "version": "0.0.1",
+  "description": "",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mjrinker/google-sheets-updater.git"
+  },
+  "author": "Matt Rinker",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mjrinker/google-sheets-updater/issues"
+  },
+  "homepage": "https://github.com/mjrinker/google-sheets-updater#readme",
+  "dependencies": {
+    "@google-cloud/local-auth": "^2.1.0",
+    "dotenv": "^16.0.3",
+    "googleapis": "^105.0.0",
+    "node-fetch": "^3.3.0"
+  }
+}
