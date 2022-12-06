@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
-import { promises as fs } from 'fs';
+import { promises as fsPromise } from 'fs';
+import fs from 'fs';
 import path from 'path';
 import process from 'process';
 import { authenticate } from '@google-cloud/local-auth';
@@ -26,7 +27,7 @@ const CREDENTIALS_PATH = path.join(process.cwd(), 'credentials.json');
  */
 const loadSavedCredentialsIfExist = async () => {
 	try {
-		const content = await fs.readFile(TOKEN_PATH);
+		const content = await fsPromise.readFile(TOKEN_PATH);
 		const credentials = JSON.parse(content);
 		return google.auth.fromJSON(credentials);
 	} catch (err) {
@@ -41,7 +42,7 @@ const loadSavedCredentialsIfExist = async () => {
  * @return {Promise<void>}
  */
 const saveCredentials = async (client) => {
-	const content = await fs.readFile(CREDENTIALS_PATH);
+	const content = await fsPromise.readFile(CREDENTIALS_PATH);
 	const keys = JSON.parse(content);
 	const key = keys.installed || keys.web;
 	const payload = JSON.stringify({
@@ -50,7 +51,7 @@ const saveCredentials = async (client) => {
 		client_secret: key.client_secret,
 		refresh_token: client.credentials.refresh_token,
 	});
-	await fs.writeFile(TOKEN_PATH, payload);
+	await fsPromise.writeFile(TOKEN_PATH, payload);
 };
 
 /**
@@ -77,20 +78,19 @@ const safeFindElementByCSS = async (selector, waitTime = 500) => {
 		return await driver.wait(until.elementLocated(By.css(selector)), waitTime);
 	} catch (error) {
 		console.warn(`Could not find element by CSS for "${selector}" due to "${error.message.replaceAll(/\n+/g, ' ')}"`);
-		// driver.quit();
-		// process.exit(12345);
 		return null;
 	}
 };
 
-const makeElementVisible = (selector) => {
+const makeElementVisible = async (selector) => {
 	try {
-		driver.executeScript(`document.querySelector('${selector}').style.position = 'static';`);
-		driver.executeScript(`document.querySelector('${selector}').style.opacity = '1';`);
-		driver.executeScript(`document.querySelector('${selector}').style.display = 'initial';`);
+		await driver.executeScript(`document.querySelector('${selector}').style.position = 'static';`);
+		await driver.executeScript(`document.querySelector('${selector}').style.opacity = '1';`);
+		await driver.executeScript(`document.querySelector('${selector}').style.display = 'initial';`);
 	} catch (error) {
-		if (error.name === 'JavascriptError') {
-			console.warn('Error making script visible', error.message);
+		console.log('scat', error.name, error.message);
+		if (error.message.toLowerCase().includes('javascript')) {
+			console.warn('Error making element visible', error.message);
 		} else {
 			throw error;
 		}
@@ -108,19 +108,20 @@ const scrapeAmazonProductPage = async (url) => {
 		const currentPriceSelector2 = '#corePrice_desktop tr:nth-child(2) .a-price .a-offscreen';
 		const basePriceSelector1 = '#corePriceDisplay_desktop_feature_div .basisPrice .a-offscreen';
 		const basePriceSelector2 = '#corePrice_desktop tr:nth-child(1) .a-price .a-offscreen';
+		const couponTextSelector = '[id^="couponText"]';
 
 		const currentPriceEl1 = await safeFindElementByCSS(currentPriceSelector1);
 		const currentPriceEl2 = await safeFindElementByCSS(currentPriceSelector2);
 		const basePriceEl1 = await safeFindElementByCSS(basePriceSelector1);
 		const basePriceEl2 = await safeFindElementByCSS(basePriceSelector2);
-		const couponTextEl = await safeFindElementByCSS('[id^="couponText"]');
+		const couponTextEl = await safeFindElementByCSS(couponTextSelector);
 
 		if (currentPriceEl1) {
-			makeElementVisible(currentPriceSelector1);
+			await makeElementVisible(currentPriceSelector1);
 		}
 
 		if (basePriceEl1) {
-			makeElementVisible(basePriceSelector1);
+			await makeElementVisible(basePriceSelector1);
 		}
 
 		const currentPriceText = await currentPriceEl1?.getText();
@@ -128,11 +129,11 @@ const scrapeAmazonProductPage = async (url) => {
 		currentPrice = parseFloat(currentPriceText?.replaceAll(/[^\d\.]/g, ''));
 		basePrice = parseFloat(basePriceText?.replaceAll(/[^\d\.]/g, ''));
 		if ((!currentPriceEl1 || Number.isNaN(currentPrice)) && currentPriceEl2) {
-			makeElementVisible(currentPriceSelector2);
+			await makeElementVisible(currentPriceSelector2);
 			currentPrice = parseFloat((await currentPriceEl2?.getText())?.replaceAll(/[^\d\.]/g, ''));
 		}
-		if ((!basePriceEl2 || Number.isNaN(basePrice)) && currentPriceEl2) {
-			makeElementVisible(basePriceSelector2);
+		if ((!basePriceEl1 || Number.isNaN(basePrice)) && basePriceEl2) {
+			await makeElementVisible(basePriceSelector2);
 			basePrice = parseFloat((await basePriceEl2?.getText())?.replaceAll(/[^\d\.]/g, ''));
 		}
 		couponText = await couponTextEl?.getText();
@@ -155,7 +156,7 @@ const scrapeAmazonProductPage = async (url) => {
 };
 
 const getAmazonPrice = async (link) => {
-	const content = await fs.readFile(CREDENTIALS_PATH);
+	const content = await fsPromise.readFile(CREDENTIALS_PATH);
 	const keys = JSON.parse(content);
 	const apiKey = keys?.rainforestapi?.apiKey;
 	if (!apiKey) {
@@ -272,6 +273,12 @@ const getLowestAmazonPrice = async (auth) => {
 		},
 	});
 
+	sheets.spreadsheets.values.clear({
+		spreadsheetId: '140m7l6kp2dGbmufbGFJ9W2N28Zcb1dkAD5Ncv80lIjk',
+		range: `${targetSheet}!I2:I`,
+		requestBody: {},
+	});
+
 	const now = (new Date());
 	const nowString = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()} ${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
 	const logData = newRowData
@@ -299,8 +306,8 @@ const screen = {
 let driver = new Builder()
 	.forBrowser('chrome')
 	.setChromeOptions(new chrome.Options()
-		// .headless()
-		// .windowSize(screen)
+		.headless()
+		.windowSize(screen)
 	)
 	// .withCapabilities(Capabilities.chrome())
 	.build();
@@ -309,6 +316,17 @@ authorize().then(async (auth) => {
 	await getLowestAmazonPrice(auth);
 	await driver.quit();
 }).catch((error) => {
-	console.error(error);
-	driver.quit();
+	if (error.message === 'invalid_grant') {
+		fs.unlinkSync('./token.json');
+		authorize().then(async (auth) => {
+			await getLowestAmazonPrice(auth);
+			await driver.quit();
+		}).catch((error) => {
+			console.error(error);
+			driver.quit();
+		});
+	} else {
+		console.error(error);
+		driver.quit();
+	}
 });
